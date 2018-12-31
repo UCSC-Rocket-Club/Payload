@@ -40,7 +40,7 @@ void *read_accel(double *buf) {
 	*/
 	double sums[3] = {0};
 
-	printf("Accelerometer readings: \n");
+	printf("\nAccelerometer readings: \n");
 	printf("    X     |     Y     |     Z    |\n");
 
 	for (int i=0; i<ACCEL_READS; i++) {
@@ -66,8 +66,8 @@ void *read_accel(double *buf) {
 		printf("%f | ", buf[i]);
 	}
 	printf("\n");
-
 }
+
 int main(int argc, char *argv[]) {
 	rc_mpu_config_t mpu_conf = rc_mpu_default_config();
 
@@ -78,15 +78,27 @@ int main(int argc, char *argv[]) {
 
 	double accel_data[3] = {0};
 
-	read_accel(accel_data);
-
 	// Set signal handler so the loop can exit cleanly
 	signal(SIGINT, __signal_handler);
 	running = 1;
 
-	while (running && fabs(G - accel_data[Z]) > 0.1) { 
-		// Z !~ 9.8
+	while (running) { 
+		printf("Move me\n");
+		sleep(2); // Allow servo time to move
+
+		// Read accelerometer 
+		printf("Starting reading...\n");
 		read_accel(accel_data);
+
+		// Determine which way to move based on accel reading
+		if (fabs(G - accel_data[Z]) > 0.1) {
+			// Z ~ 9.8
+			break;
+		} else if(accel_data[X] > 0) {
+			printf("TURN ME COUNTER CLOCKWISE\n");
+		} else {
+			printf("TURN ME CLOCKWISE\n");
+		}
 	}
-	printf("IM RIGHT SIDE UP");
+	printf("IM RIGHT SIDE UP\n");
 }
