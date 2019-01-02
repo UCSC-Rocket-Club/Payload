@@ -1,3 +1,4 @@
+
 /* @title ALC.c
  *
  * @brief      Actuated landing control (ALC)--Use a servo to rotate the rover until it's upright.
@@ -5,9 +6,6 @@
  * @author     Olivia Wong, parts taken from rc_test_mpu example
  *
  * @date       12/29/2018
- * 1. make loop to PRINT DOWN ACCEL
- * 2. keep
- * 3.
  */
 
 #include <stdio.h>
@@ -21,15 +19,15 @@
 #include <unistd.h>
 
 #define G 9.8 // Gravity m/s^2
-#define ACCEL_READS 3 // # of times to read accelerometer before averaging
+#define ACCEL_READS 3 // # of accelerometer reads to average
 #define ACCEL_READ_INTERVAL 500000 // Microseconds
 #define X 0
 #define Y 1
 #define Z 2
-#define SERVO_POS 1.0
-#define NUM_PULSES 5
-#define PULSE_FREQ_HZ 50
-#define PULSE_WIDTH_US 12 // Microseconds. idk if this changes anything
+#define PRECISION 0.16 // How close Z accel has to be to -9.8. 0.1-0.2 works well. Lower value = more precise. Higher value = faster
+#define NUM_PULSES 7
+#define PULSE_POS 1.0 // See http://strawsondesign.com/docs/librobotcontrol/group___servo.html
+#define PULSE_FREQ_HZ 50 // If this value isn't 50, and PULSE_POS isn't 1.0 it won't be able to move both ways so don't touch this
 #define SERVO_CH 8
 
 
@@ -41,7 +39,8 @@ static void __signal_handler(__attribute__ ((unused)) int dummy) {
 	running = 0;
 	return;
 }
-int run_motor(double direction) {
+
+int run_motor(double direction, double num_pulses) {
 	// Init servo
 	// Read adc to make sure battery is connected
 	if(rc_adc_init()) {
@@ -61,11 +60,10 @@ int run_motor(double direction) {
 	printf("Turning On 6V Servo Power Rail\n");
 	rc_servo_power_rail_en(1);
 
-	// Send pulse(s)
-	printf("Moving servo to %f...\n", SERVO_POS * direction);
-
-	for (int i=0; i<NUM_PULSES; i++) {
-		if(rc_servo_send_pulse_normalized(SERVO_CH, SERVO_POS * direction) == -1) return -1;
+	// Send pulses
+	printf("Moving direction %f, %f pulses", direction, num_pulses);
+	for (int i=0; i<num_pulses; i++) {
+		if(rc_servo_send_pulse_normalized(SERVO_CH, direction * PULSE_POS) == -1) return -1;
 		rc_usleep(1000000 / PULSE_FREQ_HZ);
 	}
 
@@ -84,24 +82,17 @@ void *read_accel(double *buf) {
 	*/
 	double sums[3] = {0};
 
-	printf("\nAccelerometer readings: \n");
-	printf("    X     |     Y     |     Z    |\n");
-
 	for (int i=0; i<ACCEL_READS; i++) {
 		if(rc_mpu_read_accel(&mpu_data)<0) {
 			printf("Read accel data failed\n");
 		}
 		for (int j=0; j<3; j++) {
-			// Print X, Y, Z accel data
-			printf("%f | ", mpu_data.accel[j]);
 			sums[j] += mpu_data.accel[j]; // Take sums to avg later
 		}
-		printf("\n");
 
-		usleep(ACCEL_READ_INTERVAL); // Wait to take next reading
+		usleep(ACCEL_READ_INTERVAL); // Wait for new data to update
 	}
-
-	printf("\nAverages:\n");
+	printf("\nAccelerometer readings: \n");
 	printf("    X     |     Y     |     Z    |\n");
 
 	for (int i=0; i<3; i++) {
@@ -109,6 +100,42 @@ void *read_accel(double *buf) {
 		printf("%f | ", buf[i]);
 	}
 	printf("\n\n");
+}
+
+double determine_num_pulses(double accel[3]) {
+	/*
+	Determine # of pulses (how much to turn)
+
+	The servo (SM-S4303R) is kind of finicky and doesn't move the exact distance each time
+	Also the robotcontrollib servo functions are made for a normal servo and this is a continuous 360 degree servo so it's weird
+	Frequency needs to be 50hz for it to be able to move both directions
+
+	But this is what I've found from messing with it: (assuming 50hz and default pulse width)
+
+	Anything less than 4 pulses results in no motion / motion one direction
+	4 pulses moves a tiny bit (around 1/40 of a revolution / 10˚)
+	5 pulses moves ~45˚
+	7 pulses move ~85˚
+	10 pulses moves ~120˚
+
+	keep in mind these^ are VERY approximate
+	*/
+
+	double num_pulses = 4;
+	double z = accel[Z];
+
+	if (z < -4.5) {
+		// Turn ~120˚
+		num_pulses = 5;
+	} else if (z >= -4.5 && z < 4.5) {
+		// Turn ~85˚
+		num_pulses = 7;
+	} else if (z >= 4.5 && z < 8.5) {
+		// Turn ~120˚
+		num_pulses = 10;
+	}
+
+	return (num_pulses);
 }
 
 int main(int argc, char *argv[]) {
@@ -126,26 +153,30 @@ int main(int argc, char *argv[]) {
 	signal(SIGINT, __signal_handler);
 	running = 1;
 
-	while (running) {
+	double direction; // Counter clockwise
 
+	while (running) {
 		// Read accelerometer
 		printf("Starting reading...\n");
 		read_accel(accel_data);
 
-		// Determine which way to move based on accel reading
-		if (fabs(G - accel_data[Z]) < 0.13) {
-			// Z ~ 9.8
-			// TODO: test 0.13 value, make sure it works for servo sides
+
+		if (fabs(G - accel_data[Z]) < PRECISION) {
+			// When accelerometer data for Z ~ 9.8, the BB is upright
 			printf("IM RIGHT SIDE UP\n");
 			break;
-		} else if(accel_data[X] > 0) {
-			printf("TURN ME COUNTER CLOCKWISE\n");
-			run_motor(1.0);
-
 		} else {
-			printf("TURN ME CLOCKWISE\n");
-			run_motor(-1.0);
+			// Determine which direction to move based on accel reading
+			if(accel_data[X] < 0) {
+				printf("TURN ME CLOCKWISE\n");
+				direction = -1.0;
+			} else {
+				printf("TURN ME COUNTER CLOCKWISE/n");
+				direction = 1.0; // CCW
+			}
+			run_motor(direction, determine_num_pulses(accel_data));
 		}
+
 		rc_usleep(500000); // Sleep half a second to make sure motor is done moving
 	}
 }
