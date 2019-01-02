@@ -8,8 +8,6 @@ It has four software systems: ALC (Actuated Landing Correction), Drive, Object D
 
 This is currently a work in progress but stay tuned for the finished product in Spring!
 
-Tags/technologies we'll be using: Beaglebone Blue/Linux, C, Python, OpenCV, accelerometer, ultrasonic sensor (object detection), Lidar, autonomous driving
-
 ## Actuated Landing Correction
 The ALC uses accelerometer data to determine which way to turn the rover using a continuous servo. This way, the rover will be oriented correctly after the rocket lands. 
 
