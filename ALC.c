@@ -1,125 +1,4 @@
-Starting reading...
 
-Accelerometer readings:
-    X     |     Y     |     Z    |
--4.831634 | 0.095740 | -9.066608 |
-
-TURN ME CLOCKWISE
-Turning On 6V Servo Power Rail
-Moving direction -1.000000, 10.000000 pulsesTurn off/clean up servo
-Finished servo move
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
--7.895150 | -0.665393 | 4.882386 |
-
-TURN ME CLOCKWISE
-Turning On 6V Servo Power Rail
-Moving direction -1.000000, 10.000000 pulsesTurn off/clean up servo
-Finished servo move
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
-7.015874 | -1.836612 | 6.600027 |
-
-TURN ME COUNTER CLOCKWISE/nTurning On 6V Servo Power Rail
-Moving direction 1.000000, 10.000000 pulsesTurn off/clean up servo
-Finished servo move
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
--6.402851 | 2.726993 | 7.946372 |
-
-TURN ME CLOCKWISE
-Turning On 6V Servo Power Rail
-Moving direction -1.000000, 10.000000 pulsesTurn off/clean up servo
-Finished servo move
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
-8.049003 | -0.606353 | 4.338135 |
-
-TURN ME COUNTER CLOCKWISE/nTurning On 6V Servo Power Rail
-Moving direction 1.000000, 7.000000 pulsesTurn off/clean up servo
-Finished servo move
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
--2.395489 | 0.345462 | 9.418070 |
-
-TURN ME CLOCKWISE
-Turning On 6V Servo Power Rail
-Moving direction -1.000000, 4.000000 pulsesTurn off/clean up servo
-Finished servo move
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
--0.416919 | -0.060635 | 9.743350 |
-
-IM RIGHT SIDE UP
-debian@beaglebone:~/Payload$ sudo ./alc
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
--9.525358 | 1.621197 | -0.301480 |
-
-TURN ME CLOCKWISE
-Turning On 6V Servo Power Rail
-Moving direction -1.000000, 7.000000 pulsesTurn off/clean up servo
-Finished servo move
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
--5.517995 | -0.305570 | 8.255786 |
-
-TURN ME CLOCKWISE
-Turning On 6V Servo Power Rail
-Moving direction -1.000000, 10.000000 pulsesTurn off/clean up servo
-Finished servo move
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
-7.875220 | -1.391421 | 1.754930 |
-
-TURN ME COUNTER CLOCKWISE/nTurning On 6V Servo Power Rail
-Moving direction 1.000000, 7.000000 pulsesTurn off/clean up servo
-Finished servo move
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
-0.651286 | 0.864851 | 9.354600 |
-
-TURN ME COUNTER CLOCKWISE/nTurning On 6V Servo Power Rail
-Moving direction 1.000000, 4.000000 pulsesTurn off/clean up servo
-Finished servo move
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
--2.497527 | 0.510613 | 9.590230 |
-
-TURN ME CLOCKWISE
-Turning On 6V Servo Power Rail
-Moving direction -1.000000, 4.000000 pulsesTurn off/clean up servo
-Finished servo move
-Starting reading...
-
-Accelerometer readings:
-    X     |     Y     |     Z    |
-0.330027 | -0.387747 | 9.779845 |
-
-IM RIGHT SIDE UP
-debian@beaglebone:~/Payload$ cat ALC.c
 /* @title ALC.c
  *
  * @brief      Actuated landing control (ALC)--Use a servo to rotate the rover until it's upright.
@@ -140,14 +19,15 @@ debian@beaglebone:~/Payload$ cat ALC.c
 #include <unistd.h>
 
 #define G 9.8 // Gravity m/s^2
-#define ACCEL_READS 3 // # of times to read accelerometer before averaging
+#define ACCEL_READS 3 // # of accelerometer reads to average
 #define ACCEL_READ_INTERVAL 500000 // Microseconds
 #define X 0
 #define Y 1
 #define Z 2
+#define PRECISION 0.16 // How close Z accel has to be to -9.8. 0.1-0.2 works well. Lower value = more precise. Higher value = faster
 #define NUM_PULSES 7
 #define PULSE_POS 1.0 // See http://strawsondesign.com/docs/librobotcontrol/group___servo.html
-#define PULSE_FREQ_HZ 50 // If this value isn't 50, and PULSE_POS isn't 1.0 it won't be able to move both ways so don't touch it
+#define PULSE_FREQ_HZ 50 // If this value isn't 50, and PULSE_POS isn't 1.0 it won't be able to move both ways so don't touch this
 #define SERVO_CH 8
 
 
@@ -159,40 +39,7 @@ static void __signal_handler(__attribute__ ((unused)) int dummy) {
 	running = 0;
 	return;
 }
-double determine_num_pulses(double accel[3]) {
-	/*
-	The servo (SM-S4303R) is kind of finicky and doesn't move the exact distance each time
-	Also the robotcontrollib servo functions are made for a normal servo and this is a continuous 360 degree servo so it's weird
-	Frequency needs to be 50hz for it to be able to move both directions
 
-	But this is what I've found from messing with it: (assuming 50hz and default pulse width)
-
-	Anything less than 4 pulses results in no motion / motion one direction
-	4 pulses moves a tiny bit (around 1/40 of a revolution / 10˚)
-	5 pulses moves ~45˚
-	7 pulses move ~85˚
-	10 pulses moves ~120˚
-
-	keep in mind these^ are VERY approximate
-	*/
-	double num_pulses = 4;
-
-	// Determine # of pulses (how much to turn)
-	double z = accel[Z];
-	if (z < -4.5) {
-		// Turn ~120˚
-		num_pulses = 10;
-	} else if (z >= -4.5 && z < 4.5) {
-		// Turn ~85˚
-		num_pulses = 7;
-	} else if (z >= 4.5 && z < 8.5) {
-		// Turn ~120˚
-		num_pulses = 10;
-	}
-
-	return (num_pulses);
-
-}
 int run_motor(double direction, double num_pulses) {
 	// Init servo
 	// Read adc to make sure battery is connected
@@ -255,6 +102,42 @@ void *read_accel(double *buf) {
 	printf("\n\n");
 }
 
+double determine_num_pulses(double accel[3]) {
+	/*
+	Determine # of pulses (how much to turn)
+
+	The servo (SM-S4303R) is kind of finicky and doesn't move the exact distance each time
+	Also the robotcontrollib servo functions are made for a normal servo and this is a continuous 360 degree servo so it's weird
+	Frequency needs to be 50hz for it to be able to move both directions
+
+	But this is what I've found from messing with it: (assuming 50hz and default pulse width)
+
+	Anything less than 4 pulses results in no motion / motion one direction
+	4 pulses moves a tiny bit (around 1/40 of a revolution / 10˚)
+	5 pulses moves ~45˚
+	7 pulses move ~85˚
+	10 pulses moves ~120˚
+
+	keep in mind these^ are VERY approximate
+	*/
+
+	double num_pulses = 4;
+	double z = accel[Z];
+
+	if (z < -4.5) {
+		// Turn ~120˚
+		num_pulses = 5;
+	} else if (z >= -4.5 && z < 4.5) {
+		// Turn ~85˚
+		num_pulses = 7;
+	} else if (z >= 4.5 && z < 8.5) {
+		// Turn ~120˚
+		num_pulses = 10;
+	}
+
+	return (num_pulses);
+}
+
 int main(int argc, char *argv[]) {
 	// Init sensor reading
 	rc_mpu_config_t mpu_conf = rc_mpu_default_config();
@@ -278,9 +161,8 @@ int main(int argc, char *argv[]) {
 		read_accel(accel_data);
 
 
-		if (fabs(G - accel_data[Z]) < 0.16) {
+		if (fabs(G - accel_data[Z]) < PRECISION) {
 			// When accelerometer data for Z ~ 9.8, the BB is upright
-			// TODO: test 0.13 value, make sure it works for servo sides
 			printf("IM RIGHT SIDE UP\n");
 			break;
 		} else {
