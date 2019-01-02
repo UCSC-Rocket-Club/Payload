@@ -1,4 +1,4 @@
-# An autonomous soil collection rover
+# Slim Sammy: an autonomous soil collection rover
 
 See [this doc](https://docs.google.com/document/d/1HmI_FHcoloKW9NTQgP__jY4tAkVI42v2Wa3lFLxiRu0/edit) for how to contribute and use the Beaglebone!!!
 
