@@ -6,7 +6,7 @@ Our rover is powered by the BeagleBone Blue (an embedded Linux board), and uses 
 It has three systems: ALC (Actuated Landing Correction), Drive, Object Detection, and Soil Collection
 
 ## ALC.c
-This uses accelerometer data to determine which way to turn the rover using a continuous servo. This way, the rover will be oriented correctly after the rocket lands. 
+The Actuated Landing Correction system uses accelerometer data to determine which way to turn the rover using a continuous servo. This way, the rover will be oriented correctly after the rocket lands. 
 
 Compile with: 
 ``` 
