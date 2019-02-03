@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <stdlib.h> // for atoi
 #include <getopt.h>
+#include <unistd.h>
 #include <rc/motor.h>
 #include <rc/time.h>
 static int running = 0;
@@ -51,49 +52,60 @@ static void __signal_handler(__attribute__ ((unused)) int dummy)
 }
 int main(int argc, char *argv[])
 {
-        double duty = 0.0;
+        double duty = DEFAULT_DUTY;
         int freq_hz = RC_MOTOR_DEFAULT_PWM_FREQ;
         m_mode_t m_mode = DISABLED;
         
-        // set signal handler so the loop can exit cleanly
+        // Set signal handler so the loop can exit cleanly
         signal(SIGINT, __signal_handler);
         running = 1;
-        // initialize hardware first
+
+        // Initialize hardware first
         if(rc_motor_init_freq(freq_hz)) return -1;
 
-        m_mode = TURN_LEFT;
+        m_mode = EXIT_ROCKET;
 
 
-        // decide what to do
+        // Decide what to do
         switch(m_mode){
         case NORMAL:
                 printf("Sending duty cycle %0.4f\n", duty);
-                rc_motor_set(L_MOTOR, DEFAULT_DUTY);
-                rc_motor_set(R_MOTOR, DEFAULT_DUTY);
+                rc_motor_set(L_MOTOR, duty);
+                rc_motor_set(R_MOTOR, duty);
                 break;
         case TURN_LEFT:
                 printf("Turning left \n");
-                rc_motor_set(L_MOTOR, DEFAULT_DUTY / 2);
-                rc_motor_set(R_MOTOR, DEFAULT_DUTY);
+                rc_motor_set(L_MOTOR, duty / 2);
+                rc_motor_set(R_MOTOR, duty);
                 break;
         case TURN_RIGHT:
                 printf("Turning right\n");
-                rc_motor_set(L_MOTOR, DEFAULT_DUTY);
-                rc_motor_set(R_MOTOR, DEFAULT_DUTY / 2);
+                rc_motor_set(L_MOTOR, duty);
+                rc_motor_set(R_MOTOR, duty / 2);
                 break;
         case BRAKE:
                 rc_motor_brake(L_MOTOR);
                 rc_motor_brake(R_MOTOR);
                 break;
         case EXIT_ROCKET:
+                // Go forward 2 sec, turn right, go forward again
+                printf("Goin FORWARD\n");
+                rc_motor_set(L_MOTOR, duty);
+                rc_motor_set(R_MOTOR, duty);
+                sleep(2);
                 printf("Turning right\n");
-                rc_motor_set(L_MOTOR, DEFAULT_DUTY);
-                rc_motor_set(R_MOTOR, DEFAULT_DUTY / 2);
+                rc_motor_set(L_MOTOR, duty);
+                rc_motor_set(R_MOTOR, duty / 2);
+                sleep(3);
+                printf("Goin FORWARD again\n");
+                rc_motor_set(L_MOTOR, duty);
+                rc_motor_set(R_MOTOR, duty);
                 break;
         default:
                 break;
         }
-        // wait untill the user exits
+
+        // Wait until the user exits
         while(running){
                 if(m_mode==SWEEP){
                         duty = -duty; // toggle back and forth to sweep motors side to side
