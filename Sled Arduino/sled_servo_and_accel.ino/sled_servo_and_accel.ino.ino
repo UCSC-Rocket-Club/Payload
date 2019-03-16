@@ -20,10 +20,9 @@
 
 MPU6050 mpu;
 //MPU6050 mpu(0x69); // <-- use for AD0 high
-#define DEV_MODE true // enables serial print statements
+
+
 #define LED_PIN 13 // (Arduino is 13, Teensy is 11, Teensy++ is 6)
-
-
 bool blinkState = false;
 
 // MPU control/status vars
@@ -58,29 +57,44 @@ void dmpDataReady() {
 }
 
 
+
 // ================================================================
 // ===                      INITIAL SETUP                       ===
 // ================================================================
 
-MPU6050 mpu_setup(MPU6050 mpu, int zero_motion_detection_threshold, int zero_motion_detection_duration) {
+void mpu_setup() {
+  
+}
+
+void setup() {
+    // join I2C bus (I2Cdev library doesn't do this automatically)
+    #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+        Wire.begin();
+        TWBR = 24; // 400kHz I2C clock (200kHz if CPU is 8MHz)
+    #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+        Fastwire::setup(400, true);
+    #endif
 
     // initialize serial communication
     // (115200 chosen because it is required for Teapot Demo output, but it's
     // really up to you depending on your project)
-    #if DEV_MODE
     Serial.begin(115200);
     while (!Serial); // wait for Leonardo enumeration, others continue immediately
-    
+
+    // NOTE: 8MHz or slower host processors, like the Teensy @ 3.3v or Ardunio
+    // Pro Mini running at 3.3v, cannot handle this baud rate reliably due to
+    // the baud timing being too misaligned with processor ticks. You must use
+    // 38400 or slower in these cases, or use some kind of external separate
+    // crystal solution for the UART timer.
+
     // initialize device
     Serial.println(F("Initializing I2C devices..."));
-    #endif DEV_MODE
     mpu.initialize();
 
     // verify connection
-    #if DEV_MODE
     Serial.println(F("Testing device connections..."));
     Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
-    #endif DEV_MODE
+
     devStatus = mpu.dmpInitialize();
 
     // supply your own gyro offsets here, scaled for min sensitivity
@@ -92,57 +106,53 @@ MPU6050 mpu_setup(MPU6050 mpu, int zero_motion_detection_threshold, int zero_mot
     // make sure it worked (returns 0 if so)
     if (devStatus == 0) {
         // turn on the DMP, now that it's ready
-        //Serial.println(F("Enabling DMP..."));
+        Serial.println(F("Enabling DMP..."));
         mpu.setDMPEnabled(true);
-  
+
         // enable Arduino interrupt detection
-        #if DEV_MODE
         Serial.println(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
-        #endif DEV_MODE
         attachInterrupt(0, dmpDataReady, RISING);
         mpuIntStatus = mpu.getIntStatus();
-       
 
         // set our DMP Ready flag so the main loop() function knows it's okay to use it
-        
-        
-        #if DEV_MODE
         Serial.println(F("DMP ready! Waiting for first interrupt..."));
-        #endif DEV_MODE
         dmpReady = true;
 
         // get expected DMP packet size for later comparison
         packetSize = mpu.dmpGetFIFOPacketSize();
-        /*
+
         
         mpu.setMotionDetectionThreshold(1);
         mpu.setMotionDetectionDuration(3);
+
         
         mpu.setIntZeroMotionEnabled(false);
-        mpu.setIntMotionEnabled(false);*/
-        
-        mpu.setZeroMotionDetectionThreshold(zero_motion_detection_threshold);
-        mpu.setZeroMotionDetectionDuration(zero_motion_detection_duration);
+        mpu.setIntMotionEnabled(false);
+        mpu.setZeroMotionDetectionThreshold(3);
+        mpu.setZeroMotionDetectionDuration(27);
         
     } else {
         // ERROR!
         // 1 = initial memory load failed
         // 2 = DMP configuration updates failed
         // (if it's going to break, usually the code will be 1)
-        #if DEV_MODE
         Serial.print(F("DMP Initialization failed (code "));
         Serial.print(devStatus);
         Serial.println(F(")"));
-        #endif DEV_MODE
     }
 
     // configure LED for output
     pinMode(LED_PIN, OUTPUT);
-    return mpu;
 }
 
-boolean zeroMotionDetected(MPU6050 mpu) {
-  // if programming failed, don't try to do anything
+
+
+// ================================================================
+// ===                    MAIN PROGRAM LOOP                     ===
+// ================================================================
+
+void loop() {
+    // if programming failed, don't try to do anything
     if (!dmpReady) return;
 
     // wait for MPU interrupt or extra packet(s) available
@@ -152,6 +162,7 @@ boolean zeroMotionDetected(MPU6050 mpu) {
         // if you are really paranoid you can frequently test in between other
         // stuff to see if mpuInterrupt is true, and if so, "break;" from the
         // while() loop to immediately process the MPU data
+        // .
     }
 
     // reset interrupt flag and get INT_STATUS byte
@@ -165,10 +176,7 @@ boolean zeroMotionDetected(MPU6050 mpu) {
     if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
         // reset so we can continue cleanly
         mpu.resetFIFO();
-        #if DEV_MODE
         Serial.println(F("FIFO overflow!"));
-        #endif DEV_MODE 
-        
 
     // otherwise, check for DMP data ready interrupt (this should happen frequently)
     } else if (mpuIntStatus & 0x02) {
@@ -181,19 +189,14 @@ boolean zeroMotionDetected(MPU6050 mpu) {
         // track FIFO count here in case there is > 1 packet available
         // (this lets us immediately read more without waiting for an interrupt)
         fifoCount -= packetSize;
-        
-        #if DEV_MODE
-        Serial.print( "Zero motion detection status: ");
+        Serial.print( "\nzero motion detection status: ");
         Serial.print(mpu.getZeroMotionDetected());
-        #endif DEV_MODE 
-        
+        Serial.print( "\n");
+        //Serial.print(mpu.getAcceleration());
+
 
         // blink LED to indicate activity
         blinkState = !blinkState;
         digitalWrite(LED_PIN, blinkState);
     }
-}
-
-void loop() {
-  zeroMotionDetected();
 }
