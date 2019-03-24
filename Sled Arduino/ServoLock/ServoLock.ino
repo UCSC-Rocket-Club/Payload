@@ -13,14 +13,13 @@
 #define UNLOCKED_POS 75// Position of servo where rover can exit. 
 #define LOCKED_POS 162 // Position of servo where rover is locked. 
 #define SERVO_PIN 9 // PWM pin on micro
-#define TIME_UNLOCKED // The amount of time the rover is unlocked before we lock it again
 
 // COMMUNICATION WITH ROVER MICROCONTROLLER
 #define TX_PIN_TO_ROVER 14
 
 #define DEV_MODE true
 
-#define TIME_TO_WAIT 120000 //12 secs, ms // flight is 90 secs
+#define TIME_TO_WAIT 12000 //12 secs, ms // flight is 90 secs CHANGE_FOR_FLIGHT
 #define TIME_UNLOCKED 8000 // 8 secs
 
 Servo servo;  // create servo object to control our locking servo
@@ -65,13 +64,17 @@ void setup() {
   //delay(TIME_UNLOCKED); // Wait after unlocking rover
 
   //lockRover();
-/*
+
   // Power on rover Arduino
   signalRoverArduino();
 
   delay(2000);
-  */
- 
+
+  //wrap up 
+  lockRover();
+  digitalWrite(TX_PIN_TO_ROVER, LOW);
+  
+
 }
 
 
